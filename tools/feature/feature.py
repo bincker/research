@@ -17,8 +17,10 @@
 #
 
 import psycopg2
-import sys, json
+import sys, json, re
 from androguard.core.bytecodes import apk as androapk
+from androguard.core.bytecodes import dvm
+from androguard.core.analysis import analysis
 
 def init(dbname, username, password=None, host=None):
   try:
@@ -74,3 +76,41 @@ def extract_permission(cur, name, path, sus, category):
   except Exception as e:
     pass
     #print e
+
+def extract_apicall(cur, name, path, sus, category):
+  try:
+    sql = 'SELECT apk_name FROM apicalls WHERE apk_name = %s'
+    cur.execute(sql, (name,))
+    result = cur.fetchall()
+    if len(result) > 0:
+      #print '%s has been analyzed' % name
+      return
+
+    a = androapk.APK(path)
+    d = dvm.DalvikVMFormat(a.get_dex())
+    x = analysis.VMAnalysis(d)
+
+    s = set([])
+    cs = [cc.get_name() for cc in d.get_classes()]
+    
+    for method in d.get_methods():
+      g = x.get_method(method)
+
+      if method.get_code() == None:
+        continue
+
+      for i in g.get_basic_blocks().get(): 
+        for ins in i.get_instructions():
+          output = ins.get_output()
+          m = re.search('(L[^;]*;)->([a-zA-Z0-9_<>]+\()', output)
+          if m and m.group(1) not in cs:
+            s.add('%s %s' % (m.group(1), m.group(2)[:-1]))
+
+    s = list(s)
+    s.sort()
+
+    sql = 'INSERT INTO apicalls VALUES (nextval(%s), %s, %s, %s, %s);'
+    data = ('apicalls_apk_id_seq', name, sus, category, '\n'.join(s))
+    cur.execute(sql, data)
+  except Exception as e:
+    print e
