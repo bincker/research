@@ -17,7 +17,7 @@
 #
 
 import psycopg2, multiprocessing, signal
-import itertools, argparse, os, json, re, zipfile, time
+import itertools, argparse, os, json, re, zipfile, time, sys
 import common
 from androguard.core.bytecodes import apk 
 from androguard.core.bytecodes import dvm
@@ -75,9 +75,10 @@ def do_work(config, table, work, sus, category, doc, path):
   count = 0
 
   # Start API call extraction.
+  print category
   for app_name in report.keys():
     count += 1
-    print '%s(%d/%d): %s' % (category, count, total, app_name)
+    print '%s (%d/%d): %s' % (category, count, total, app_name)
 
     # Terminate if the parent process exit.
     if do_work.event.is_set():
@@ -101,28 +102,39 @@ def do_work(config, table, work, sus, category, doc, path):
     try:
       l = work(app_path)
 
-      sql = 'INSERT INTO ' + table + ' VALUES(nextval(%s), %s, %s, %s, %s);'
+      sql = 'INSERT INTO ' + table + \
+          ' VALUES (nextval(%s), %s, %s, %s, %s);'
       data = ('%s_apk_id_seq' % table, app_name, sus, category, l)
       cur.execute(sql, data)
       conn.commit()
 
-    except zipfile.BadZipfile as e:
-      print 'Broken ZZZ',
-      print e
+    except zipfile.BadZipfile:
+      #print 'Broken zip'
+      continue
 
-    except Exception as e:
-      print e
-      raise
-      
+    except UnicodeEncodeError:
+      print 'Unicode error'
+      continue
+
+    except psycopg2.Warning:
+      print 'PSY_WARNING'
+      continue
+    
+    except psycopg2.Error:
+      print 'PSY_ERROR'
+      continue
+
+    except:
+      continue
 
   # Close the database connection.
-  print 'Terminating %t%s' % category
+  print 'Terminating \t%s' % category
   try:
     cur.close()
     conn.close()
 
-  except Exception as e:
-    print e
+  except: 
+    print 'no....'
     raise
 
 
@@ -172,7 +184,10 @@ def main():
   # Wait for the child processes.
   try:
     while not result.ready():
-      time.sleep(30)
+    #while True:
+      time.sleep(5)
+
+    print 'Parent process reaches end!'
 
   except KeyboardInterrupt:
     print '\nParent process receives CTRL-C'
@@ -180,8 +195,7 @@ def main():
     # Notify the child processes to terminate.
     event.set()
 
-    while not result.ready():
-      time.sleep(10)
+    result.wait()
 
 
 if __name__ == '__main__':
