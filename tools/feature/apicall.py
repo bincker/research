@@ -58,7 +58,6 @@ def do_work(config, table, work, sus, category, doc, path):
   # Add this line to make sure it is the parent process that
   # receives CTRL-C.
   signal.signal(signal.SIGINT, signal.SIG_IGN)
-  print 'Child PID: %d' % multiprocessing.current_process().pid
 
   # Establish the connection to the database.
   try:
@@ -78,7 +77,7 @@ def do_work(config, table, work, sus, category, doc, path):
   # Start API call extraction.
   for app_name in report.keys():
     count += 1
-    print 'Processing %s(%d/%d): %s' % (category, count, total, app_name)
+    print '%s(%d/%d): %s' % (category, count, total, app_name)
 
     # Terminate if the parent process exit.
     if do_work.event.is_set():
@@ -107,8 +106,13 @@ def do_work(config, table, work, sus, category, doc, path):
       cur.execute(sql, data)
       conn.commit()
 
+    except zipfile.BadZipfile as e:
+      print 'Broken ZZZ',
+      print e
+
     except Exception as e:
       print e
+      raise
       
 
   # Close the database connection.
@@ -159,7 +163,6 @@ def main():
   paths = [batch[c][1] for c in batch]
 
   # Multiprocessing
-  print 'Parent PID: %d' % os.getppid()
   event = multiprocessing.Event()
   pool = multiprocessing.Pool(args.t[0], do_work_init, [event])
   args_for_pool = zip(
