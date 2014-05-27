@@ -27,9 +27,9 @@ def get_permissions(app_path):
   a = apk.APK(app_path)
   p = a.get_permissions()
   p = list(set(p))
-  p.sort()
 
-  return '\n'.join(p)
+  return p
+
 
 def main():
   """Main function"""
@@ -53,7 +53,7 @@ def main():
   configs = [args.c[0] for c in batch]
   tables = ['permissions' for c in batch]
   works = [get_permissions for c in batch]
-  suss = [0 for c in batch]
+  suss = [batch[c][2] for c in batch]
   docs = [batch[c][0] for c in batch]
   paths = [batch[c][1] for c in batch]
 
