@@ -16,7 +16,7 @@
 # along with this program.  If not, see [http://www.gnu.org/licenses/].
 #
 
-import common
+import common, parse_apicall
 import psycopg2, argparse, multiprocessing, signal, time, sys, re
 from androguard.core.bytecodes import apk, dvm
 from androguard.core.analysis import analysis
@@ -29,7 +29,7 @@ def get_apicalls(app_path):
   x = analysis.VMAnalysis(d)
 
   s = set([])
-  cs = [cc.get_name() for cc in d.get_classes()]
+  cs = [cc.get_name().replace('/', '.') for cc in d.get_classes()]
   
   for method in d.get_methods():
     g = x.get_method(method)
@@ -40,9 +40,22 @@ def get_apicalls(app_path):
     for i in g.get_basic_blocks().get(): 
       for ins in i.get_instructions():
         output = ins.get_output()
-        m = re.search('(L[^;]*;)->([a-zA-Z0-9_<>]+\()', output)
+        output = output.replace('/', '.')
+        m = re.search(r'(L[^;]*;)->([^\(]*)\(([^\)]*)\)(.*)', output)
         if m and m.group(1) not in cs:
-          s.add('%s %s' % (m.group(1), m.group(2)[:-1]))
+          result = \
+              '<' + \
+              parse_apicall.parse_type(m.groups()[0]) + ': ' + \
+              parse_apicall.parse_type(m.groups()[3]) + ' ' + \
+              m.groups()[1] + '('
+
+          args = []
+          for arg in m.groups()[2].split():
+            args.append(parse_apicall.parse_type(arg))
+          result += ','.join(args)
+          result += ')>'
+
+          s.add(result)
 
   l = list(s)
   l.sort()
@@ -88,6 +101,7 @@ def do_work(config, data):
     except Exception as e:
       print e
   
+  print 'Child process reaches end.'
 
   cur.close()
   conn.close()
